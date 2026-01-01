@@ -43,10 +43,16 @@ class CTFMenuView(discord.ui.View):
         async with get_db() as session:
             known_events:List[Event] = await crud.read_event(session, finish_after=None)
             custom_events = await crud.read_custom_event(session)
-        if len(known_events) == 0 and len(custom_events) == 0:
+        # 僅顯示已建立的分類（存在於 Discord 的分類頻道）
+        filtered_events:List[Event] = []
+        for e in known_events:
+            if getattr(e, "category_id", None) and e.category_id is not None:
+                filtered_events.append(e)
+
+        if len(filtered_events) == 0 and len(custom_events) == 0:
             await interaction.response.send_message(content="目前沒有可移除的活動或自訂類別", ephemeral=True)
             return
-        view = RemoveSelectPrompt(self.bot, known_events, custom_events)
+        view = RemoveSelectPrompt(self.bot, filtered_events, custom_events)
         await interaction.response.send_message(content="請選擇要移除的資料", view=view, ephemeral=True)
 
 
@@ -54,85 +60,6 @@ class CTFMenuView(discord.ui.View):
     async def ctf_create_custom_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
         await interaction.response.send_modal(CreateCTFModal(bot=self.bot, title="Create a custom CTF category"))
 
-class JoinChannelModal(discord.ui.Modal):
-    def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        
-        self.bot = bot
-
-    async def callback(self, interaction: discord.Interaction):
-        async with get_db() as session:
-            known_events:List[Event] = await crud.read_event(session)
-            custom_events = await crud.read_custom_event(session)
-        if len(known_events) == 0 and len(custom_events) == 0:
-            await interaction.response.send_message(content="目前沒有可加入的活動或自訂類別", ephemeral=True)
-            return
-        view = JoinSelectPrompt(self.bot, known_events, custom_events)
-        await interaction.response.send_message(content="請選擇要加入的項目", view=view, ephemeral=True)
-        return
-
-class RemoveCTFModal(discord.ui.Modal):
-    def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        
-        self.bot = bot
-
-    async def callback(self, interaction: discord.Interaction):
-        async with get_db() as session:
-            known_events:List[Event] = await crud.read_event(session, finish_after=None)
-            custom_events = await crud.read_custom_event(session)
-        if len(known_events) == 0 and len(custom_events) == 0:
-            await interaction.response.send_message(content="目前沒有可移除的活動或自訂類別", ephemeral=True)
-            return
-        view = RemoveSelectPrompt(self.bot, known_events, custom_events)
-        await interaction.response.send_message(content="請選擇要移除的資料", view=view, ephemeral=True)
-        return
-
-class JoinSelectPrompt(discord.ui.View):
-    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
-        super().__init__(timeout=180)
-        self.add_item(JoinSelect(bot, known_events, custom_events))
-
-class JoinSelect(discord.ui.Select):
-    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
-        self.bot = bot
-        options:List[discord.SelectOption] = []
-        # then custom categories
-        for ce in custom_events:
-            options.append(discord.SelectOption(label=ce.title[:100], value=f"custom:{ce.category_id}", description=f"category id={ce.category_id}"))
-        # events first
-        for e in known_events:
-            options.append(discord.SelectOption(label=e.title[:100], value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
-        # limit to 25 (Discord limit)
-        options = options[:25]
-        super().__init__(placeholder="選擇要加入的項目", min_values=1, max_values=1, options=options, custom_id="ctf_select_join")
-
-    async def callback(self, interaction:discord.Interaction):
-        choice = self.values[0]
-        if choice.startswith("event:"):
-            event_id = int(choice.split(":")[1])
-            await join_channel(self.bot, interaction, event_id)
-            return
-        if choice.startswith("custom:"):
-            category_id = int(choice.split(":")[1])
-            await join_custom_channel(self.bot, interaction, category_id)
-            return
-
-class RemoveSelectPrompt(discord.ui.View):
-    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
-        super().__init__(timeout=180)
-        self.add_item(RemoveSelect(bot, known_events, custom_events))
-
-class RemoveSelect(discord.ui.Select):
-    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
-        self.bot = bot
-        options:List[discord.SelectOption] = []
-        for ce in custom_events:
-            options.append(discord.SelectOption(label=ce.title[:100], value=f"custom:{ce.category_id}", description=f"category id={ce.category_id}"))
-        for e in known_events:
-            options.append(discord.SelectOption(label=e.title[:100], value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
-        options = options[:25]
-        super().__init__(placeholder="選擇要移除的資料", min_values=1, max_values=1, options=options, custom_id="ctf_select_remove")
 
     async def callback(self, interaction:discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -189,12 +116,12 @@ class JoinSelect(discord.ui.Select):
     def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
         self.bot = bot
         options:List[discord.SelectOption] = []
-        # events first
-        for e in known_events:
-            options.append(discord.SelectOption(label=e.title[:100], value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
         # then custom categories
         for ce in custom_events:
             options.append(discord.SelectOption(label=ce.title[:100], value=f"custom:{ce.category_id}", description=f"category id={ce.category_id}"))
+        # events first
+        for e in known_events:
+            options.append(discord.SelectOption(label=e.title[:100], value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
         # limit to 25 (Discord limit)
         options = options[:25]
         super().__init__(placeholder="選擇要加入的項目", min_values=1, max_values=1, options=options, custom_id="ctf_select_join")
@@ -219,10 +146,12 @@ class RemoveSelect(discord.ui.Select):
     def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
         self.bot = bot
         options:List[discord.SelectOption] = []
-        for e in known_events:
-            options.append(discord.SelectOption(label=e.title[:100], value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
+        # 僅包含存在中的分類頻道
         for ce in custom_events:
             options.append(discord.SelectOption(label=ce.title[:100], value=f"custom:{ce.category_id}", description=f"category id={ce.category_id}"))
+        for e in known_events:
+            if getattr(e, "category_id", None) and e.category_id is not None:
+                options.append(discord.SelectOption(label=e.title[:100], value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
         options = options[:25]
         super().__init__(placeholder="選擇要移除的資料", min_values=1, max_values=1, options=options, custom_id="ctf_select_remove")
 
