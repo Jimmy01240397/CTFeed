@@ -19,122 +19,90 @@ logger = logging.getLogger(__name__)
 
 # ui - ctf menu
 class CTFMenuView(discord.ui.View):
-    def __init__(self, bot:commands.Bot):
+    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
         super().__init__(timeout=None)
-        
         self.bot = bot
+        self.add_item(JoinSelect(bot, known_events, custom_events))
+        self.add_item(RemoveSelect(bot, known_events, custom_events))
+        self.add_item(CreateSelect(bot, known_events))
 
-    
-    @discord.ui.button(label="Join a channel", custom_id="ctf_select_channel", style=discord.ButtonStyle.blurple, emoji=settings.EMOJI)
-    async def ctf_select_channel_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(JoinChannelModal(bot=self.bot, title="Create / Join via event id or category id"))
-
-    @discord.ui.button(label="Remove from database", custom_id="ctf_remove_db", style=discord.ButtonStyle.red, emoji="🗑️")
-    async def ctf_remove_db_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(RemoveCTFModal(bot=self.bot, title="Remove CTF via event id or category id"))
-
-    @discord.ui.button(label="Create CTF", custom_id="ctf_create_custom", style=discord.ButtonStyle.green, emoji="🆕")
-    async def ctf_create_custom_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(CreateCTFModal(bot=self.bot, title="Create a custom CTF category"))
-
-class JoinChannelModal(discord.ui.Modal):
-    def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        
+class JoinSelect(discord.ui.Select):
+    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
         self.bot = bot
-        
-        self.add_item(discord.ui.InputText(label="Enter CTFTime event id or Discord category id", style=discord.InputTextStyle.short))
+        options = []
+        for e in known_events[:15]:
+            options.append(discord.SelectOption(label=e.title, value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
+        for ce in custom_events[:8]:
+            options.append(discord.SelectOption(label=ce.title, value=f"custom:{ce.category_id}", description=f"category id={ce.category_id}"))
+        placeholder = "選擇要加入的項目"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, custom_id="ctf_select_join")
 
-
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            provided_id = int(self.children[0].value)
-        except:
-            await interaction.response.send_message(content="Invalid arguments", ephemeral=True)
+    async def callback(self, interaction:discord.Interaction):
+        value = self.values[0]
+        if value.startswith("event:"):
+            event_id = int(value.split(":")[1])
+            await join_channel(self.bot, interaction, event_id)
             return
-        
-        # If the provided id corresponds to a Discord CategoryChannel, treat as custom category join
-        ch = self.bot.get_channel(provided_id)
-        if isinstance(ch, discord.CategoryChannel):
-            await join_custom_channel(self.bot, interaction, provided_id)
+        if value.startswith("custom:"):
+            category_id = int(value.split(":")[1])
+            await join_custom_channel(self.bot, interaction, category_id)
             return
 
-        # Otherwise treat it as a CTFTime event id
-        await join_channel(self.bot, interaction, provided_id)
-        return
-
-class RemoveCTFModal(discord.ui.Modal):
-    def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        
+class RemoveSelect(discord.ui.Select):
+    def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
         self.bot = bot
-        
-        self.add_item(discord.ui.InputText(label="Enter CTFTime event id or Discord category id", style=discord.InputTextStyle.short))
+        options = []
+        for e in known_events[:15]:
+            options.append(discord.SelectOption(label=e.title, value=f"event:{e.event_id}", description=f"event id={e.event_id}"))
+        for ce in custom_events[:8]:
+            options.append(discord.SelectOption(label=ce.title, value=f"custom:{ce.category_id}", description=f"category id={ce.category_id}"))
+        placeholder = "選擇要移除的資料"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options, custom_id="ctf_select_remove")
 
-    async def callback(self, interaction: discord.Interaction):
-        try:
-            provided_id = int(self.children[0].value)
-        except:
-            await interaction.response.send_message(content="Invalid arguments", ephemeral=True)
-            return
-
+    async def callback(self, interaction:discord.Interaction):
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        value = self.values[0]
         deleted_events = 0
         deleted_custom = 0
-        targets_event_ids = set()
         try:
             async with get_db() as session:
-                # match Event by event_id
-                events_by_eid = await crud.read_event(session, event_id=[provided_id], finish_after=None)
-                targets_event_ids.update([e.event_id for e in events_by_eid])
-
-                # match Event by category_id
-                events_by_cid = await crud.read_event(session, category_id=[provided_id], finish_after=None)
-                targets_event_ids.update([e.event_id for e in events_by_cid])
-
-                # delete Events
-                if len(targets_event_ids) > 0:
-                    res = await crud.delete_event(session, event_id=list(targets_event_ids))
+                if value.startswith("event:"):
+                    eid = int(value.split(":")[1])
+                    res = await crud.delete_event(session, event_id=[eid])
                     if res == 1:
-                        deleted_events = len(targets_event_ids)
-
-                # delete CustomEvent by category_id
-                customs = await crud.read_custom_event(session, category_id=[provided_id])
-                if len(customs) > 0:
-                    res2 = await crud.delete_custom_event(session, category_id=[provided_id])
+                        deleted_events = 1
+                elif value.startswith("custom:"):
+                    cid = int(value.split(":")[1])
+                    res2 = await crud.delete_custom_event(session, category_id=[cid])
                     if res2 == 1:
-                        deleted_custom = len(customs)
+                        deleted_custom = 1
         except Exception as e:
-            await interaction.response.send_message(content=f"Failed: {e}", ephemeral=True)
+            await interaction.followup.send(content=f"Failed: {e}", ephemeral=True)
             return
-
         if deleted_events == 0 and deleted_custom == 0:
-            await interaction.response.send_message(content="No matching event or custom category in database", ephemeral=True)
+            await interaction.followup.send(content="No matching record deleted", ephemeral=True)
             return
+        await interaction.followup.send(content=f"Deleted: events={deleted_events}, custom_categories={deleted_custom}", ephemeral=True)
 
-        await interaction.response.send_message(
-            content=f"Deleted DB records: events={deleted_events}, custom_categories={deleted_custom}",
-            ephemeral=True
-        )
-
-class CreateCTFModal(discord.ui.Modal):
-    def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        
+class CreateSelect(discord.ui.Select):
+    def __init__(self, bot:commands.Bot, known_events:List[Event]):
         self.bot = bot
-        
-        self.add_item(discord.ui.InputText(label="Enter custom CTF name", style=discord.InputTextStyle.short))
+        options = []
+        for e in known_events[:20]:
+            options.append(discord.SelectOption(label=e.title, value=f"name:{e.title}", description="使用活動名稱建立自訂分類"))
+        presets = ["Practice", "Training", "Workshop", "CTF Study", "Internal CTF"]
+        for p in presets:
+            options.append(discord.SelectOption(label=p, value=f"name:{p}", description="使用預設名稱建立自訂分類"))
+        placeholder = "選擇要建立的自訂 CTF 名稱"
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options[:25], custom_id="ctf_select_create")
 
-    async def callback(self, interaction: discord.Interaction):
-        name = self.children[0].value.strip()
-        if not name:
-            await interaction.response.send_message(content="Name cannot be empty", ephemeral=True)
-            return
-        try:
+    async def callback(self, interaction:discord.Interaction):
+        value = self.values[0]
+        if value.startswith("name:"):
+            name = value.split(":", 1)[1]
             await create_custom_channel(self.bot, interaction, name)
-        except Exception as e:
-            # create_custom_channel handles response, but just in case
-            await interaction.response.send_message(content=f"Failed to create: {e}", ephemeral=True)
-        return
+            return
 
 # cog
 class CTF(commands.Cog):
@@ -182,7 +150,7 @@ class CTF(commands.Cog):
                 )
 
         
-        await ctx.response.send_message(embed=embed, view=CTFMenuView(self.bot), ephemeral=True)
+        await ctx.response.send_message(embed=embed, view=CTFMenuView(self.bot, known_events, custom_events), ephemeral=True)
 
 
 
