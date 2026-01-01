@@ -39,6 +39,35 @@ async def read_custom_event(
         logger.error(f"failed to read database : {str(e)}")
         return []
 
+async def update_custom_event(
+    db:AsyncSession,
+    category_id: int,
+    title:Optional[str]=None,
+    private:Optional[bool]=None,
+) -> Optional[CustomEvent]:
+    try:
+        # find
+        query = sqlalchemy.select(CustomEvent).where(CustomEvent.category_id == category_id)
+        event = (await db.execute(query)).scalar_one_or_none()
+        if event is None:
+            return None
+        
+        # update
+        if not(title is None):
+            event.title = title
+                
+        if not(private is None):
+            event.is_private = private
+        
+        # commit
+        await db.commit()
+        await db.refresh(event)
+        return event
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"failed to update database : {str(e)}")
+        return None
+
 
 # delete
 async def delete_custom_event(

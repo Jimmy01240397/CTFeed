@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, CheckConstraint
+from sqlalchemy import Column, String, Integer, Boolean, ForeignKey, CheckConstraint
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -16,6 +16,8 @@ class Event(Base):
     
     # discord
     category_id = Column(Integer, nullable=True, unique=True, default=None)
+
+    is_private = Column(Boolean, nullable=False, default=False)
     
 
 class CustomEvent(Base):
@@ -25,3 +27,5 @@ class CustomEvent(Base):
     category_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True, autoincrement=False)
 
     title = Column(String, nullable=False)
+
+    is_private = Column(Boolean, nullable=False, default=False)

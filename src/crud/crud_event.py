@@ -63,6 +63,7 @@ async def update_event(
     title:Optional[str]=None,
     start:Optional[int]=None,
     finish:Optional[int]=None,
+    private:Optional[bool]=None,
     category_id:Optional[int]=None
 ) -> Optional[Event]:
     try:
@@ -82,6 +83,9 @@ async def update_event(
         if not(finish is None):
             event.finish = finish
         
+        if not(private is None):
+            event.is_private = private
+            
         if not(category_id is None):
             event.category_id = category_id
         

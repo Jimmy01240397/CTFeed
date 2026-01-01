@@ -79,3 +79,13 @@ async def create_event_embed(event, title:str):
     embed.set_footer(text=f"Event ID: {event['id']} | CTFtime.org")
 
     return embed
+
+async def create_custom_event_embed(name:str, title:str):
+    color = discord.Color.green()
+
+    embed = discord.Embed(
+        title=title, description=f"**{name}**", color=color
+    )
+
+    return embed
+

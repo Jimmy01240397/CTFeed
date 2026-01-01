@@ -10,37 +10,13 @@ from src.database.database import get_db
 from src.database.model import Event
 from src.utils.ctf_api import fetch_ctf_events
 from src.utils.embed_creator import create_event_embed
-from src.utils.join_channel import join_channel
+from src.utils.join_channel import join_channel, set_private
 from src.utils.join_channel import get_info_channel_for_category
+from src.utils.get_channel import get_announcement_channel
 from src import crud
 
 # logging
 logger = logging.getLogger(__name__)
-    
-# utils
-async def get_announcement_channel(bot:commands.Bot) -> discord.TextChannel:
-    channel_name = settings.ANNOUNCEMENT_CHANNEL_NAME
-    
-    channel = None
-    for guild in bot.guilds:
-        for text_channel in guild.text_channels:
-            if text_channel.name.lower() == channel_name.lower():
-                channel = text_channel
-                break
-        if channel:
-            break
-
-    if not channel:
-        logger.error(f"Can't find channel named '{channel_name}'")
-        logger.error(f"Please check:")
-        logger.error(f"1. Channel name is correct: {channel_name}")
-        logger.error(f"2. Bot has permission to view the channel")
-        logger.error(f"3. The channel exists in the server where the Bot is located")
-        await bot.close()
-        return
-    
-    return channel
-
 
 # cog
 class CTFBGTask(commands.Cog):
@@ -93,9 +69,16 @@ class CTFBGTask(commands.Cog):
                     discord.ui.Button(
                         label='Join',
                         style=discord.ButtonStyle.blurple,
-                        custom_id=f"ctf_join_channel:event:{event['id']}",
+                        custom_id=f"ctf_join_channel:event:event:{event['id']}",
                         emoji=settings.EMOJI,
                     )
+                )
+                view.add_item(
+                    discord.ui.Button(
+                        label='Set Private',
+                        style=discord.ButtonStyle.gray,
+                        custom_id=f"ctf_join_channel:private:event:{event['id']}",
+                        )
                 )
                 try:
                     await channel.send(embed=embed, view=view)
@@ -184,6 +167,70 @@ class CTFBGTask(commands.Cog):
                 return
             
             await join_channel(self.bot, interaction, event_id)
+
+        if custom_id.startswith("ctf_join_channel:private:"):
+            try:
+                _ = custom_id.split(":")
+                event_type = str(_[2])
+                event_id:int = int(_[3])
+            except:
+                await interaction.response.send_message("Invalid arguments", ephemeral=True)
+                return
+            
+            await set_private(self.bot, interaction, f"{event_type}:{event_id}")
+
+            async with get_db() as session:
+                events = await crud.read_event(session, event_id=[event_id])
+                if len(events) != 1:
+                    await interaction.response.send_message(content="Invalid event", ephemeral=True)
+                    return
+                event = events[0]
+
+                view = discord.ui.View(timeout=None)
+                view.add_item(
+                    discord.ui.Button(
+                        label='Join',
+                        style=discord.ButtonStyle.blurple,
+                        custom_id=f"ctf_join_channel:event:{event_type}:{event_id}",
+                        emoji=settings.EMOJI,
+                    )
+                )
+                view.add_item(
+                    discord.ui.Button(
+                        label=f'Set {"Private" if event.is_private else "Public"}',
+                        style=discord.ButtonStyle.gray,
+                        custom_id=f"ctf_join_channel:private:{event_type}:{event_id}",
+                        )
+                )
+                await interaction.response.edit_message(view=view)
+    
+        if custom_id.startswith("ctf_info:private:"):
+            try:
+                _ = custom_id.split(":")
+                event_type = str(_[2])
+                event_id:int = int(_[3])
+            except:
+                await interaction.response.send_message("Invalid arguments", ephemeral=True)
+                return
+            
+            await set_private(self.bot, interaction, f"{event_type}:{event_id}")
+
+            async with get_db() as session:
+                events = await crud.read_event(session, event_id=[event_id])
+                if len(events) != 1:
+                    await interaction.response.send_message(content="Invalid event", ephemeral=True)
+                    return
+                event = events[0]
+
+                view = discord.ui.View(timeout=None)
+                view.add_item(
+                    discord.ui.Button(
+                        label=f'Set {"Private" if event.is_private else "Public"}',
+                        style=discord.ButtonStyle.gray,
+                        custom_id=f"ctf_join_channel:private:{event_type}:{event_id}",
+                        )
+                )
+                await interaction.response.edit_message(view=view)
     
         return
     

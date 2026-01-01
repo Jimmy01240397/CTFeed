@@ -8,7 +8,9 @@ from src.database.model import Event
 from src.database.database import get_db
 from src import crud
 from src.utils.ctf_api import fetch_ctf_events
-from src.utils.embed_creator import create_event_embed
+from src.utils.embed_creator import create_event_embed, create_custom_event_embed
+from src.utils.get_channel import get_announcement_channel
+
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +141,15 @@ async def join_channel(
             info_ch = _get_info_channel(category)
             if info_ch:
                 embed = await create_event_embed(event_api, f"{interaction.user.display_name} 發起了 {event.title}")
-                await info_ch.send(embed=embed)
+                view = discord.ui.View(timeout=None)
+                view.add_item(
+                    discord.ui.Button(
+                        label='Set Private',
+                        style=discord.ButtonStyle.gray,
+                        custom_id=f"ctf_info:private:event:{category.id}",
+                        )
+                )
+                await info_ch.send(embed=embed, view=view)
 
             await interaction.followup.send(content="Done", ephemeral=True)
             logger.info(
@@ -176,10 +186,36 @@ async def create_custom_channel(
 
         info_ch = _get_info_channel(category)
         if info_ch:
-            await info_ch.send(embed=discord.Embed(
-                color=discord.Color.green(),
-                title=f"{interaction.user.display_name} 建立了自訂 CTF：{name}"
-            ))
+            embed = await create_custom_event_embed(name, f"{interaction.user.display_name} 發起了 {name}")
+            view = discord.ui.View(timeout=None)
+            view.add_item(
+                discord.ui.Button(
+                    label='Set Private',
+                    style=discord.ButtonStyle.gray,
+                    custom_id=f"ctf_info:private:custom:{category.id}",
+                    )
+            )
+            await info_ch.send(embed=embed, view=view)
+
+        channel:discord.TextChannel = await get_announcement_channel(bot)
+        embed = await create_custom_event_embed(name, f"{interaction.user.display_name} 發起了 {name}")
+        view = discord.ui.View(timeout=None)
+        view.add_item(
+            discord.ui.Button(
+                label='Join',
+                style=discord.ButtonStyle.blurple,
+                custom_id=f"ctf_join_channel:event:custom:{category.id}",
+                emoji=settings.EMOJI,
+            )
+        )
+        view.add_item(
+            discord.ui.Button(
+                label='Set Private',
+                style=discord.ButtonStyle.gray,
+                custom_id=f"ctf_join_channel:private:custom:{category.id}",
+                )
+        )
+        await channel.send(embed=embed, view=view)
 
         await interaction.followup.send(content="Done", ephemeral=True)
         logger.info(
@@ -231,3 +267,51 @@ async def join_custom_channel(
         return
 
 
+async def set_private(
+    bot: commands.Bot,
+    interaction: discord.Interaction,
+    event_data: str,
+):
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
+            return
+    except Exception:
+        await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
+        return
+
+    async with get_db() as session:
+        event_type = str(event_data.split(":")[0])
+        event_id = int(event_data.split(":")[1])
+        # get event from database
+        events = []
+        if event_type == "event":
+            events = await crud.read_event(session, event_id=[event_id])
+        elif event_type == "custom":
+            events = await crud.read_custom_event(session, category_id=[event_id])
+        
+        if len(events) != 1:
+            await interaction.followup.send(content="Invalid event", ephemeral=True)
+            return
+
+        event = events[0]
+
+        updated = None
+        if event_type == "event":
+            updated = await crud.update_event(session, event_id=event.event_id, private=not event.is_private)
+        elif event_type == "custom":
+            updated = await crud.update_custom_event(session, category_id=event.category_id, private=not event.is_private)
+
+        if updated is None:
+            await interaction.followup.send(
+                content=f"Failed to create: database update failed for event_id={event.event_id}",
+                ephemeral=True,
+            )
+
+        await interaction.followup.send(content="Done", ephemeral=True)
+        logger.info(
+            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event.event_id}) private={not event.is_private}"
+        )
+        return

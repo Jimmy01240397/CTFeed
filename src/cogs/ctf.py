@@ -39,6 +39,15 @@ class CTFMenuView(discord.ui.View):
 
     @discord.ui.button(label="Remove from database", custom_id="ctf_remove_db", style=discord.ButtonStyle.red, emoji="🗑️")
     async def ctf_remove_db_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
+        # 僅允許具備 Administrator 權限的使用者操作
+        try:
+            if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
+                return
+        except Exception:
+            await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
+            return
+
         # 改為顯示下拉式表單的視窗（ephemeral），使用名稱選擇
         async with get_db() as session:
             known_events:List[Event] = await crud.read_event(session, finish_after=None)
@@ -127,6 +136,15 @@ class JoinSelect(discord.ui.Select):
         super().__init__(placeholder="選擇要加入的項目", min_values=1, max_values=1, options=options, custom_id="ctf_select_join")
 
     async def callback(self, interaction:discord.Interaction):
+        # 僅允許具備 Administrator 權限的使用者操作
+        try:
+            if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
+                return
+        except Exception:
+            await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
+            return
+
         choice = self.values[0]
         if choice.startswith("event:"):
             event_id = int(choice.split(":")[1])
