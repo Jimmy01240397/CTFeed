@@ -51,8 +51,8 @@ async def _create_event_category_with_channels(
     await guild.create_text_channel("聊天", category=category)
     # Try to create a forum channel for problems; fallback to text
     try:
-        # py-cord supports create_forum
-        await guild.create_text_channel("題目", category=category, type=discord.ChannelType.forum)
+        # py-cord supports create_forum_channel
+        await guild.create_forum_channel("題目", category=category)
     except Exception as e:
         logger.warning(f"Failed to create forum channel, falling back to text channel: {e}")
         await guild.create_text_channel("題目", category=category)
