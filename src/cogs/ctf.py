@@ -8,36 +8,14 @@ from discord.ext import commands
 
 from src.config import settings
 from src.database.database import get_db
-from src.database.model import Event, CustomChannel
+from src.database.model import Event
 from src import crud
-from src.utils.join_channel import join_channel, join_channel_custom
+from src.utils.join_channel import join_channel
+from src.utils.join_channel import create_custom_channel
+from src.utils.join_channel import join_custom_channel
 
 # logging
 logger = logging.getLogger(__name__)
-
-# misc
-async def show_custom_channels(bot:commands.Bot) -> discord.Embed:
-    async with get_db() as session:
-        custom_channels:List[CustomChannel] = await crud.read_custom_channel(session)
-        
-    # embed
-    embed = discord.Embed(
-        title=f"{settings.EMOJI} Custom CTF channels",
-        color=discord.Color.green()
-    )
-    for channel in custom_channels:
-        discord_channel = bot.get_channel(channel.channel_id)
-        if discord_channel is None:
-            continue
-            
-        embed.add_field(
-            name=f"{discord_channel.name}",
-            value=f"id = {discord_channel.id}",
-            inline=False
-        )
-    
-    return embed
-
 
 # ui - ctf menu
 class CTFMenuView(discord.ui.View):
@@ -49,16 +27,15 @@ class CTFMenuView(discord.ui.View):
     
     @discord.ui.button(label="Join a channel", custom_id="ctf_select_channel", style=discord.ButtonStyle.blurple, emoji=settings.EMOJI)
     async def ctf_select_channel_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(JoinChannelModal(bot=self.bot, title="Create / Join channel via CTFTime event id"))
-        
-    
-    @discord.ui.button(label="Custom channels", custom_id="ctf_view_custom_channel", style=discord.ButtonStyle.gray)
-    async def ctf_view_custom_channel(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        
-        embed = await show_custom_channels(self.bot)
-        await interaction.followup.send(embed=embed, view=CustomChannelView(self.bot), ephemeral=True)
+        await interaction.response.send_modal(JoinChannelModal(bot=self.bot, title="Create / Join channel via CTFTime event id or Discord category id"))
 
+    @discord.ui.button(label="Remove from database", custom_id="ctf_remove_db", style=discord.ButtonStyle.red, emoji="🗑️")
+    async def ctf_remove_db_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
+        await interaction.response.send_modal(RemoveCTFModal(bot=self.bot, title="Remove from DB via event id or category id"))
+
+    @discord.ui.button(label="Create CTF", custom_id="ctf_create_custom", style=discord.ButtonStyle.green, emoji="🆕")
+    async def ctf_create_custom_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
+        await interaction.response.send_modal(CreateCTFModal(bot=self.bot, title="Create a custom CTF category"))
 
 class JoinChannelModal(discord.ui.Modal):
     def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
@@ -66,132 +43,98 @@ class JoinChannelModal(discord.ui.Modal):
         
         self.bot = bot
         
-        self.add_item(discord.ui.InputText(label="Enter CTFTime event id", style=discord.InputTextStyle.short))
+        self.add_item(discord.ui.InputText(label="Enter CTFTime event id or Discord category id", style=discord.InputTextStyle.short))
 
 
     async def callback(self, interaction: discord.Interaction):
         try:
-            event_id = int(self.children[0].value)
+            provided_id = int(self.children[0].value)
         except:
             await interaction.response.send_message(content="Invalid arguments", ephemeral=True)
             return
-            
-        await join_channel(self.bot, interaction, event_id)
+        
+        # If the provided id corresponds to a Discord CategoryChannel, treat as custom category join
+        ch = self.bot.get_channel(provided_id)
+        if isinstance(ch, discord.CategoryChannel):
+            await join_custom_channel(self.bot, interaction, provided_id)
+            return
+
+        # Otherwise treat it as a CTFTime event id
+        await join_channel(self.bot, interaction, provided_id)
         return
-    
 
-# ui - custom channel menu
-class CustomChannelView(discord.ui.View):
-    def __init__(self, bot:commands.Bot):
-        super().__init__(timeout=None)
-        
-        self.bot = bot
-
-    @discord.ui.button(label="Create a custom channel", custom_id="ctf_create_custom_channel", style=discord.ButtonStyle.success)
-    async def ctf_create_custom_channel(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(CreateCustomChannelModal(bot=self.bot, title="Create custom channel"))
-        
-    
-    @discord.ui.button(label="Join a custom channel", custom_id="ctf_join_custom_channel", style=discord.ButtonStyle.blurple)
-    async def ctf_join_custom_channel(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(JoinCustomChannelModal(bot=self.bot, title="Join custom channel"))
-
-
-class CreateCustomChannelModal(discord.ui.Modal):
+class RemoveCTFModal(discord.ui.Modal):
     def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         
         self.bot = bot
         
-        self.add_item(discord.ui.InputText(label="Channel name", style=discord.InputTextStyle.short))
-
+        self.add_item(discord.ui.InputText(label="Enter CTFTime event id or Discord category id", style=discord.InputTextStyle.short))
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        
-        channel_name = self.children[0].value
-    
-        # find category
-        category_name = "Incoming/Running CTF"
-        guild = interaction.guild
-        category = discord.utils.get(interaction.guild.categories, name=category_name)
-        if category is None:
-            await interaction.followup.send(content=f"Category '{category_name}' not found.", ephemeral=True)
+        try:
+            provided_id = int(self.children[0].value)
+        except:
+            await interaction.response.send_message(content="Invalid arguments", ephemeral=True)
             return
-    
-        # create channel
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True),
-            guild.me: discord.PermissionOverwrite(view_channel=True)
-        }
-        
-        async with get_db() as session:
-            try:
-                channel = await guild.create_text_channel(channel_name, category=category, overwrites=overwrites)
-                channel_db = await crud.create_custom_channel(session, channel_id=channel.id)
-                if channel_db is None:
-                    reason = f"Failed to create CustomChannel (channel_id={channel.id}) on database"
-                    await channel.delete(reason=reason)
-                    await interaction.followup.send(content=f"Failed to create custom channel: {reason}", ephemeral=True)
-                    return
 
-                # send announcement
-                view = discord.ui.View(timeout=None)
-                view.add_item(
-                    discord.ui.Button(
-                        label='Join',
-                        style=discord.ButtonStyle.blurple,
-                        custom_id=f'ctf_join_channel:custom:{channel.id}',
-                        emoji=settings.EMOJI,
-                    )
-                )
-                
-                await interaction.channel.send(
-                    embed=discord.Embed(
-                        color=discord.Color.green(),
-                        title=f"Click the button to join channel {channel.name}"
-                    ),
-                    view=view,
-                )
-                
-                # send welcome messahe
-                await channel.send(embed=discord.Embed(
-                    color=discord.Color.green(),
-                    title=f"{interaction.user.display_name} created the channel"
-                ))
-                
-                # update
-                embed = await show_custom_channels(self.bot)
-                await interaction.followup.send(embed=embed, view=CustomChannelView(self.bot), ephemeral=True)
+        deleted_events = 0
+        deleted_custom = 0
+        targets_event_ids = set()
+        try:
+            async with get_db() as session:
+                # match Event by event_id
+                events_by_eid = await crud.read_event(session, event_id=[provided_id], finish_after=None)
+                targets_event_ids.update([e.event_id for e in events_by_eid])
 
-                logger.info(f"User {interaction.user.display_name}(id={interaction.user.id}) created and joined channel {channel.name}(id={channel.id})")
-                return
-            except Exception as e:
-                logger.error(f"Failed to create channel: {e}")
-                await interaction.followup.send(content=f"Failed to create channel: {e}", ephemeral=True)
-                return
+                # match Event by category_id
+                events_by_cid = await crud.read_event(session, category_id=[provided_id], finish_after=None)
+                targets_event_ids.update([e.event_id for e in events_by_cid])
 
+                # delete Events
+                if len(targets_event_ids) > 0:
+                    res = await crud.delete_event(session, event_id=list(targets_event_ids))
+                    if res == 1:
+                        deleted_events = len(targets_event_ids)
 
-class JoinCustomChannelModal(discord.ui.Modal):
+                # delete CustomEvent by category_id
+                customs = await crud.read_custom_event(session, category_id=[provided_id])
+                if len(customs) > 0:
+                    res2 = await crud.delete_custom_event(session, category_id=[provided_id])
+                    if res2 == 1:
+                        deleted_custom = len(customs)
+        except Exception as e:
+            await interaction.response.send_message(content=f"Failed: {e}", ephemeral=True)
+            return
+
+        if deleted_events == 0 and deleted_custom == 0:
+            await interaction.response.send_message(content="No matching event or custom category in database", ephemeral=True)
+            return
+
+        await interaction.response.send_message(
+            content=f"Deleted DB records: events={deleted_events}, custom_categories={deleted_custom}",
+            ephemeral=True
+        )
+
+class CreateCTFModal(discord.ui.Modal):
     def __init__(self, bot:commands.Bot, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         
         self.bot = bot
         
-        self.add_item(discord.ui.InputText(label="Channel ID", style=discord.InputTextStyle.short))
-    
-    
-    async def callback(self, interaction:discord.Interaction):
-        try:
-            channel_id = int(self.children[0].value)
-        except:
-            await interaction.response.send_message("Invalid arguments", ephemeral=True)
-            return
-        
-        await join_channel_custom(self.bot, interaction, channel_id)
-        return
+        self.add_item(discord.ui.InputText(label="Enter custom CTF name", style=discord.InputTextStyle.short))
 
+    async def callback(self, interaction: discord.Interaction):
+        name = self.children[0].value.strip()
+        if not name:
+            await interaction.response.send_message(content="Name cannot be empty", ephemeral=True)
+            return
+        try:
+            await create_custom_channel(self.bot, interaction, name)
+        except Exception as e:
+            # create_custom_channel handles response, but just in case
+            await interaction.response.send_message(content=f"Failed to create: {e}", ephemeral=True)
+        return
 
 # cog
 class CTF(commands.Cog):
@@ -203,21 +146,44 @@ class CTF(commands.Cog):
     async def ctf_menu(self, ctx:discord.ApplicationContext):
         async with get_db() as session:
             known_events:List[Event] = await crud.read_event(session)
+            custom_events = await crud.read_custom_event(session)
         
         # embed
         embed = discord.Embed(
             title=f"{settings.EMOJI} CTF events tracked",
             color=discord.Color.green()
         )
+        embed.add_field(
+            name=f"{settings.EMOJI} CTFd CTF categories",
+            value="",
+            inline=False
+        )
         for event in known_events:
             embed.add_field(
-                name=f"[id={event.event_id}] {event.title}",
+                name=f"[event id={event.event_id}] {event.title}",
                 value=f"start at {datetime.fromtimestamp(event.start).astimezone(ZoneInfo(settings.TIMEZONE))}\n\
                 finish at {datetime.fromtimestamp(event.finish).astimezone(ZoneInfo(settings.TIMEZONE))}",
                 inline=False
             )
         
+        
+        # List custom CTF categories
+        if len(custom_events) > 0:
+            embed.add_field(
+                name=f"{settings.EMOJI} Custom CTF categories",
+                value="",
+                inline=False
+            )
+            for ce in custom_events:
+                embed.add_field(
+                    name=f"[category id={ce.category_id}] {ce.title}",
+                    value="",
+                    inline=False
+                )
+
+        
         await ctx.response.send_message(embed=embed, view=CTFMenuView(self.bot), ephemeral=True)
+
 
 
 def setup(bot:commands.Bot):

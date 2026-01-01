@@ -15,11 +15,13 @@ class Event(Base):
     finish = Column(Integer, nullable=False)
     
     # discord
-    channel_id = Column(Integer, nullable=True, unique=True, default=None)
+    category_id = Column(Integer, nullable=True, unique=True, default=None)
     
 
-class CustomChannel(Base):
-    __tablename__ = 'custom_channel'
+class CustomEvent(Base):
+    __tablename__ = 'custom_events'
     
     # discord
-    channel_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True, autoincrement=False)
+    category_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True, autoincrement=False)
+
+    title = Column(String, nullable=False)

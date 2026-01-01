@@ -10,7 +10,8 @@ from src.database.database import get_db
 from src.database.model import Event
 from src.utils.ctf_api import fetch_ctf_events
 from src.utils.embed_creator import create_event_embed
-from src.utils.join_channel import join_channel, join_channel_custom
+from src.utils.join_channel import join_channel
+from src.utils.join_channel import get_info_channel_for_category
 from src import crud
 
 # logging
@@ -86,13 +87,13 @@ class CTFBGTask(commands.Cog):
             
             for event in new_events_ctftime:
                 embed = await create_event_embed(event, "有新的 CTF 競賽！")
-                
+
                 view = discord.ui.View(timeout=None)
                 view.add_item(
                     discord.ui.Button(
                         label='Join',
                         style=discord.ButtonStyle.blurple,
-                        custom_id=f'ctf_join_channel:event:{event_id}',
+                        custom_id=f"ctf_join_channel:event:{event['id']}",
                         emoji=settings.EMOJI,
                     )
                 )
@@ -124,9 +125,11 @@ class CTFBGTask(commands.Cog):
                     )
                     # send notification to announcement channel
                     await channel.send(embed=embed)
-                    # send notification to private channel
-                    if not(event.channel_id is None) and not(self.bot.get_channel(event.channel_id) is None):
-                        await self.bot.get_channel(event.channel_id).send(embed=embed)
+                    # send notification to event info channel if category exists
+                    if event.category_id:
+                        info_ch = await get_info_channel_for_category(self.bot, event.category_id)
+                        if info_ch:
+                            await info_ch.send(embed=embed)
                 else: 
                     # check update
                     event_api = events_api[0]
@@ -147,20 +150,12 @@ class CTFBGTask(commands.Cog):
                         embed = await create_event_embed(event_api, title="Update detected")
                         # send notification to announcement channel
                         await channel.send(embed=embed)
-                        # send notification to private channel
-                        if not(event.channel_id is None) and not(self.bot.get_channel(event.channel_id) is None):
-                            await self.bot.get_channel(event.channel_id).send(embed=embed)
-            
-            
-            # check custom channels
-            custom_channels = await crud.read_custom_channel(session)
-            for channel_db in custom_channels:
-                channel = self.bot.get_channel(channel_db.channel_id)
-                if channel is None: # custom channel removed
-                    logger.info(f"Detected: custom channel id={channel_db.channel_id} was removed")
-                    await crud.delete_custom_channel(session, channel_db.channel_id)
-    
-        
+                        # send notification to event info channel if category exists
+                        if event.category_id:
+                            info_ch = await get_info_channel_for_category(self.bot, event.category_id)
+                            if info_ch:
+                                await info_ch.send(embed=embed)
+                    
     @task_checks.before_loop
     async def before_task_checks(self):
         await self.bot.wait_until_ready()
@@ -189,15 +184,6 @@ class CTFBGTask(commands.Cog):
                 return
             
             await join_channel(self.bot, interaction, event_id)
-        elif custom_id.startswith("ctf_join_channel:custom:"):
-            try:
-                _ = custom_id.split(":")
-                channel_id:int = int(_[2])
-            except:
-                await interaction.response.send_message("Invalid arguments", ephemeral=True)
-                return
-            
-            await join_channel_custom(self.bot, interaction, channel_id)
     
         return
     

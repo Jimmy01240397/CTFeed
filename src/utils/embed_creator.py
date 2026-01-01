@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from src.utils.ctf_api import fetch_team_info
 from src.utils.country_flags import get_country_info
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -12,9 +13,9 @@ async def create_event_embed(event, title:str):
     start_time_utc = datetime.fromisoformat(event["start"].replace("Z", "+00:00"))
     finish_time_utc = datetime.fromisoformat(event["finish"].replace("Z", "+00:00"))
 
-    taipei_tz = pytz.timezone("Asia/Taipei")
-    start_time_taipei = start_time_utc.astimezone(taipei_tz)
-    finish_time_taipei = finish_time_utc.astimezone(taipei_tz)
+    display_tz = pytz.timezone(settings.TIMEZONE)
+    start_time_taipei = start_time_utc.astimezone(display_tz)
+    finish_time_taipei = finish_time_utc.astimezone(display_tz)
 
     color = discord.Color.green()
 
@@ -46,8 +47,8 @@ async def create_event_embed(event, title:str):
 
     embed.add_field(
         name="🕐 比賽時間",
-        value=f"**開始：** {start_time_taipei.strftime('%m月%d日 %H:%M')} (台北) | {start_time_utc.strftime('%H:%M UTC')}\n"
-        f"**結束：** {finish_time_taipei.strftime('%m月%d日 %H:%M')} (台北) | {finish_time_utc.strftime('%H:%M UTC')}\n"
+        value=f"**開始：** {start_time_taipei.strftime('%m月%d日 %H:%M')} ({settings.TIMEZONE}) | {start_time_utc.strftime('%H:%M UTC')}\n"
+        f"**結束：** {finish_time_taipei.strftime('%m月%d日 %H:%M')} ({settings.TIMEZONE}) | {finish_time_utc.strftime('%H:%M UTC')}\n"
         f"**持續：** {event['duration']['days']}天 {event['duration']['hours']}小時",
         inline=False,
     )

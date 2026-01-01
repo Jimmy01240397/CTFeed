@@ -33,7 +33,7 @@ async def create_event(
 async def read_event(
     db:AsyncSession,
     event_id:Optional[List[int]]=None,
-    channel_id:Optional[List[int]]=None,
+    category_id:Optional[List[int]]=None,
     finish_after:Optional[int]=(datetime.now() + timedelta(days=settings.DATABASE_SEARCH_DAYS)).timestamp(),
 ) -> List[Event]:
     try:
@@ -42,8 +42,8 @@ async def read_event(
         if not (event_id is None):
             query = query.where(Event.event_id.in_(event_id))
         
-        if not (channel_id is None):
-            query = query.where(Event.channel_id.in_(channel_id))
+        if not (category_id is None):
+            query = query.where(Event.category_id.in_(category_id))
             
         if not (finish_after is None):
             query = query.where(Event.finish >= finish_after)
@@ -63,7 +63,7 @@ async def update_event(
     title:Optional[str]=None,
     start:Optional[int]=None,
     finish:Optional[int]=None,
-    channel_id:Optional[int]=None
+    category_id:Optional[int]=None
 ) -> Optional[Event]:
     try:
         # find
@@ -82,8 +82,8 @@ async def update_event(
         if not(finish is None):
             event.finish = finish
         
-        if not(channel_id is None):
-            event.channel_id = channel_id
+        if not(category_id is None):
+            event.category_id = category_id
         
         # commit
         await db.commit()
