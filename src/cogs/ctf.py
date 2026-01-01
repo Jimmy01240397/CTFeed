@@ -27,7 +27,7 @@ class CTFMenuView(discord.ui.View):
     
     @discord.ui.button(label="Join a channel", custom_id="ctf_select_channel", style=discord.ButtonStyle.blurple, emoji=settings.EMOJI)
     async def ctf_select_channel_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
-        await interaction.response.send_modal(JoinChannelModal(bot=self.bot, title="Create / Join via CTFTime event id or category id"))
+        await interaction.response.send_modal(JoinChannelModal(bot=self.bot, title="Create / Join via event id or category id"))
 
     @discord.ui.button(label="Remove from database", custom_id="ctf_remove_db", style=discord.ButtonStyle.red, emoji="🗑️")
     async def ctf_remove_db_callback(self, button:discord.ui.Button, interaction:discord.Interaction):
