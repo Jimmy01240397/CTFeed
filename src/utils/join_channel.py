@@ -65,8 +65,7 @@ async def join_channel(
     interaction: discord.Interaction,
     event_id: int,
 ):
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
     async with get_db() as session:
         # get event from database
@@ -157,8 +156,7 @@ async def create_custom_channel(
     interaction: discord.Interaction,
     name: str,
 ):
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
     guild = interaction.guild
     member = guild.get_member(interaction.user.id)
@@ -199,8 +197,7 @@ async def join_custom_channel(
     interaction: discord.Interaction,
     category_id: int,
 ):
-    if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
     guild = interaction.guild
     member = guild.get_member(interaction.user.id)
