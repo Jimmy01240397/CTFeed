@@ -10,7 +10,7 @@ from src.database.database import get_db
 from src.database.model import Event
 from src.utils.ctf_api import fetch_ctf_events
 from src.utils.embed_creator import create_event_embed
-from src.utils.join_channel import join_channel, set_private
+from src.utils.join_channel import join_request, join_channel, set_private
 from src.utils.join_channel import get_info_channel_for_category
 from src.utils.get_channel import get_announcement_channel
 from src import crud
@@ -161,12 +161,13 @@ class CTFBGTask(commands.Cog):
         if custom_id.startswith("ctf_join_channel:event:"):
             try:
                 _ = custom_id.split(":")
-                event_id:int = int(_[2])
+                event_type = str(_[2])
+                event_id:int = int(_[3])
             except:
                 await interaction.response.send_message("Invalid arguments", ephemeral=True)
                 return
             
-            await join_channel(self.bot, interaction, event_id)
+            await join_request(self.bot, interaction, f"{event_type}:{event_id}")
 
         if custom_id.startswith("ctf_join_channel:private:"):
             try:
@@ -180,9 +181,13 @@ class CTFBGTask(commands.Cog):
             await set_private(self.bot, interaction, f"{event_type}:{event_id}")
 
             async with get_db() as session:
-                events = await crud.read_event(session, event_id=[event_id])
+                events = []
+                if event_type == "event":
+                    events = await crud.read_event(session, event_id=[event_id])
+                elif event_type == "custom":
+                    events = await crud.read_custom_event(session, category_id=[event_id])
                 if len(events) != 1:
-                    await interaction.response.send_message(content="Invalid event", ephemeral=True)
+                    await interaction.followup.send(content="Invalid event", ephemeral=True)
                     return
                 event = events[0]
 
@@ -231,6 +236,46 @@ class CTFBGTask(commands.Cog):
                         )
                 )
                 await interaction.response.edit_message(view=view)
+
+        # Admin approval handlers
+        if custom_id.startswith("ctf_admin_approve:join:"):
+            try: # custom_id=f"ctf_admin_approve:join:{event_type}:{event_id}:{guild_id}:{user_id}",
+                _ = custom_id.split(":")
+                event_type = _[2]  # event/custom
+                event_id = int(_[3])
+                guild_id = int(_[4])
+                user_id = int(_[5])
+            except Exception:
+                await interaction.response.send_message("Invalid arguments", ephemeral=True)
+                return
+
+            # Only admins can approve
+            try:
+                if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
+                    return
+            except Exception:
+                await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
+                return
+
+            await join_channel(self.bot, interaction, f"{event_type}:{event_id}", guild_id, user_id)
+            await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
+
+        if custom_id.startswith("ctf_admin_reject:join:"):
+            # Only admins can reject
+            try:
+                if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
+                    return
+            except Exception:
+                await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
+                return
+
+            try:
+                await interaction.response.edit_message(content="Rejected by admin", view=None)
+            except Exception:
+                await interaction.followup.send(content="Rejected by admin")
+            return
     
         return
     

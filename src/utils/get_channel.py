@@ -29,3 +29,23 @@ async def get_announcement_channel(bot:commands.Bot) -> discord.TextChannel:
         return
     
     return channel
+
+async def get_admin_channel(bot:commands.Bot) -> discord.TextChannel:
+    channel_name = settings.ADMIN_CHANNEL_NAME
+    
+    channel = None
+    for guild in bot.guilds:
+        for text_channel in guild.text_channels:
+            if text_channel.name.lower() == channel_name.lower():
+                channel = text_channel
+                break
+        if channel:
+            break
+
+    if not channel:
+        logger.error(f"Can't find admin channel named '{channel_name}'")
+        logger.error("Please check: 1) Name correct 2) Bot permissions 3) Channel exists")
+        await bot.close()
+        return
+    
+    return channel

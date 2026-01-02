@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # Discord bot configuration
     DISCORD_BOT_TOKEN:str
+    ADMIN_CHANNEL_NAME:str
     
     # CTFTime tracking configuration
     CTFTIME_API_URL:str="https://ctftime.org/api/v1/events/"

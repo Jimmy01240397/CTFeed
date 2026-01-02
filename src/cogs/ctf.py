@@ -10,9 +10,8 @@ from src.config import settings
 from src.database.database import get_db
 from src.database.model import Event
 from src import crud
-from src.utils.join_channel import join_channel
+from src.utils.join_channel import join_request
 from src.utils.join_channel import create_custom_channel
-from src.utils.join_channel import join_custom_channel
 
 # logging
 logger = logging.getLogger(__name__)
@@ -146,14 +145,8 @@ class JoinSelect(discord.ui.Select):
             return
 
         choice = self.values[0]
-        if choice.startswith("event:"):
-            event_id = int(choice.split(":")[1])
-            await join_channel(self.bot, interaction, event_id)
-            return
-        if choice.startswith("custom:"):
-            category_id = int(choice.split(":")[1])
-            await join_custom_channel(self.bot, interaction, category_id)
-            return
+
+        await join_request(self.bot, interaction, choice)
 
 class RemoveSelectPrompt(discord.ui.View):
     def __init__(self, bot:commands.Bot, known_events:List[Event], custom_events):
