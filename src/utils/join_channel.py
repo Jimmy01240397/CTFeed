@@ -176,13 +176,6 @@ async def join_channel(
         role = await _get_or_create_event_role(guild, event.title)
         if isinstance(existing, discord.CategoryChannel):
             try:
-                await _ensure_role_permission(existing, role)
-                if role not in member.roles:
-                    await member.add_roles(role, reason=f"Join event {event.event_id}")
-                else:
-                    await messager(content="You have joined the event", ephemeral=True)
-                    return False
-
                 info_ch = _get_info_channel(existing)
                 if info_ch:
                     await info_ch.send(embed=discord.Embed(
@@ -195,6 +188,14 @@ async def join_channel(
                 )
                 if fromadmin:
                     await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
+
+                await _ensure_role_permission(existing, role)
+                if role not in member.roles:
+                    await member.add_roles(role, reason=f"Join event {event.event_id}")
+                else:
+                    await messager(content="You have joined the event", ephemeral=True)
+                    return False
+
                 return True
             except Exception as e:
                 logger.error(f"Failed to join event: {e}")
@@ -215,11 +216,6 @@ async def join_channel(
             }
 
             category = await _create_event_category_with_channels(guild, event.title, overwrites)
-            await _ensure_role_permission(category, role)
-            try:
-                await member.add_roles(role, reason=f"Join event {event.event_id}")
-            except Exception:
-                pass
             updated = await crud_event.update_event(session, event_id=event.event_id, category_id=category.id)
             if updated is None:
                 await messager(
@@ -234,6 +230,12 @@ async def join_channel(
 
             if fromadmin:
                 await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
+
+            await _ensure_role_permission(category, role)
+            try:
+                await member.add_roles(role, reason=f"Join event {event.event_id}")
+            except Exception:
+                pass
 
             info_ch = _get_info_channel(category)
             if info_ch:
