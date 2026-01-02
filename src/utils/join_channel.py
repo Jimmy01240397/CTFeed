@@ -275,7 +275,7 @@ async def create_custom_channel(
         async with get_db() as session:
             event = await crud_custom_event.create_event(session, title=name, category_id=category.id)
 
-        role = await _get_or_create_event_role(guild, event.event_id, event.title)
+        role = await _get_or_create_event_role(guild, event.title)
         await _ensure_role_permission(category, role)
         try:
             if member:
