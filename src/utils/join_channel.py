@@ -345,6 +345,6 @@ async def set_private(
             return False
 
         logger.info(
-            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event.event_id}) private={event.is_private}"
+            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event_id}) private={event.is_private}"
         )
         return True
