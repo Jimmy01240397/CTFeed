@@ -120,8 +120,8 @@ async def join_request(
                 await interaction.followup.send(content=f"審核請求失敗：{e}", ephemeral=True)
                 return
 
-        await join_channel(bot, interaction, event_data, guild_id, user_id)
-        await interaction.followup.send(content="Done", ephemeral=True)
+        if await join_channel(bot, interaction, event_data, guild_id, user_id):
+            await interaction.followup.send(content="Done", ephemeral=True)
 
 async def join_channel(
     bot: commands.Bot,
@@ -145,16 +145,18 @@ async def join_channel(
             events = await crud.read_custom_event(session, category_id=[event_id])
         if len(events) != 1:
             await messager(content="Invalid event", ephemeral=True)
-            return
+            return False
         event = events[0]
 
         guild = bot.get_guild(guild_id)
         if guild is None:
-            return False, "Guild not found"
+            await messager(content="Guild not found", ephemeral=True)
+            return False
         member = guild.get_member(user_id)
         user = bot.get_user(user_id)
         if member is None:
-            return False, "Member not found"
+            await messager(content="Member not found", ephemeral=True)
+            return False
 
         # If we already have a stored id, treat it as a category id
         existing = bot.get_channel(event.category_id) if event.category_id else None
@@ -164,7 +166,7 @@ async def join_channel(
                 perms = existing.permissions_for(member)
                 if perms.view_channel:
                     await messager(content="You have joined the category", ephemeral=True)
-                    return
+                    return False
 
                 await existing.set_permissions(member, view_channel=True)
 
@@ -175,22 +177,21 @@ async def join_channel(
                         title=f"{user.display_name} joined the category"
                     ))
 
-                await messager(content="Done", ephemeral=True)
                 logger.info(
                     f"User {user.display_name}(id={user.id}) joined category {existing.name}(id={existing.id})"
                 )
-                return
+                return True
             except Exception as e:
                 logger.error(f"Failed to join category: {e}")
                 await messager(content=f"Failed to join category: {e}", ephemeral=True)
-                return
+                return False
 
         if event_type == "event":
             # Otherwise create a new category with child channels
             events_api = await fetch_ctf_events(event.event_id)
             if len(events_api) != 1:
                 await messager(content="Invalid event", ephemeral=True)
-                return
+                return False
             event_api = events_api[0]
 
             overwrites = {
@@ -212,7 +213,7 @@ async def join_channel(
                     await category.delete(reason="DB update failed for event creation")
                 except Exception:
                     pass
-                return
+                return False
 
             info_ch = _get_info_channel(category)
             if info_ch:
@@ -230,7 +231,7 @@ async def join_channel(
             logger.info(
                 f"User {user.display_name}(id={user.id}) created and joined category {category.name}(id={category.id})"
             )
-            return
+            return True
 
 async def create_custom_channel(
     bot: commands.Bot,
