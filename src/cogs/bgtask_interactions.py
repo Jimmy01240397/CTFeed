@@ -259,7 +259,7 @@ class CTFBGTask(commands.Cog):
                 await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
                 return
 
-            await join_channel(self.bot, interaction, f"{event_type}:{event_id}", guild_id, user_id)
+            await join_channel(self.bot, interaction, f"{event_type}:{event_id}", guild_id, user_id, True)
             await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
 
         if custom_id.startswith("ctf_admin_reject:join:"):

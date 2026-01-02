@@ -131,7 +131,7 @@ async def join_channel(
     user_id: int,
     fromadmin: bool=False,
 ):
-    messager = interaction.followup.send if fromadmin else interaction.response.send_message
+    messager = interaction.followup.send if not fromadmin else interaction.response.send_message
 
     event_type = str(event_data.split(":")[0])
     event_id = int(event_data.split(":")[1])
