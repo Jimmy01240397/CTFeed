@@ -135,15 +135,6 @@ class JoinSelect(discord.ui.Select):
         super().__init__(placeholder="選擇要加入的項目", min_values=1, max_values=1, options=options, custom_id="ctf_select_join")
 
     async def callback(self, interaction:discord.Interaction):
-        # 僅允許具備 Administrator 權限的使用者操作
-        try:
-            if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
-                await interaction.response.send_message(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
-                return
-        except Exception:
-            await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
-            return
-
         choice = self.values[0]
 
         await join_request(self.bot, interaction, choice)
