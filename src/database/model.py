@@ -3,29 +3,37 @@ from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
 
-class Event(Base):
-    __tablename__ = 'events'
-    
-    # id
-    event_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True, autoincrement=False)
+class BaseEvent(Base):
+    __abstract__ = True
+    __tablename__ = 'base_events'
 
-    # event info
-    title = Column(String, nullable=False)
-    start = Column(Integer, nullable=False)
-    finish = Column(Integer, nullable=False)
-    
-    # discord
+    title = Column(String, unique=True, nullable=False)
+    is_private = Column(Boolean, nullable=False, default=False)
+
+    # id
+    event_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True, autoincrement=True)
     category_id = Column(Integer, nullable=True, unique=True, default=None)
 
-    is_private = Column(Boolean, nullable=False, default=False)
+    @property
+    def event_type(self) -> str:
+        return "base"
+
+
+class Event(BaseEvent):
+    __tablename__ = 'events'
+    
+    # event info
+    start = Column(Integer, nullable=False)
+    finish = Column(Integer, nullable=False)
+
+    @property
+    def event_type(self) -> str:
+        return "event"
     
 
-class CustomEvent(Base):
+class CustomEvent(BaseEvent):
     __tablename__ = 'custom_events'
     
-    # discord
-    category_id = Column(Integer, primary_key=True, index=True, nullable=False, unique=True, autoincrement=False)
-
-    title = Column(String, nullable=False)
-
-    is_private = Column(Boolean, nullable=False, default=False)
+    @property
+    def event_type(self) -> str:
+        return "custom"

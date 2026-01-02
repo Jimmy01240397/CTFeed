@@ -6,7 +6,8 @@ import discord
 
 from src.database.model import Event
 from src.database.database import get_db
-from src import crud
+import src.crud.event as crud_event
+import src.crud.custom_event as crud_custom_event
 from src.utils.ctf_api import fetch_ctf_events
 from src.utils.embed_creator import create_event_embed, create_custom_event_embed
 from src.utils.get_channel import get_announcement_channel, get_admin_channel
@@ -75,9 +76,9 @@ async def join_request(
     events = []
     async with get_db() as session:
         if event_type == "event":
-            events = await crud.read_event(session, event_id=[event_id])
+            events = await crud_event.read_event(session, event_id=[event_id])
         elif event_type == "custom":
-            events = await crud.read_custom_event(session, category_id=[event_id])
+            events = await crud_custom_event.read_event(session, event_id=[event_id])
         if len(events) != 1:
             await interaction.followup.send(content="Invalid event", ephemeral=True)
             return
@@ -107,8 +108,7 @@ async def join_request(
                 embed = discord.Embed(
                     title="審核請求：加入私密活動",
                     description=(
-                        f"使用者 <@{user_id}> 請求加入：{event.title} "
-                        + (f"(event_id={event.event_id})" if event_type == "event" else f"(category_id={event.category_id})")
+                        f"使用者 <@{user_id}> 請求加入：{event.title} (event_id={event.event_id})"
                     ),
                     color=discord.Color.orange(),
                 )
@@ -140,9 +140,9 @@ async def join_channel(
         # get event from database
         events = []
         if event_type == "event":
-            events = await crud.read_event(session, event_id=[event_id])
+            events = await crud_event.read_event(session, event_id=[event_id])
         elif event_type == "custom":
-            events = await crud.read_custom_event(session, category_id=[event_id])
+            events = await crud_custom_event.read_event(session, event_id=[event_id])
         if len(events) != 1:
             await messager(content="Invalid event", ephemeral=True)
             return False
@@ -158,14 +158,12 @@ async def join_channel(
             await messager(content="Member not found", ephemeral=True)
             return False
 
-        # If we already have a stored id, treat it as a category id
         existing = bot.get_channel(event.category_id) if event.category_id else None
         if isinstance(existing, discord.CategoryChannel):
             try:
-                # Grant access on category
                 perms = existing.permissions_for(member)
                 if perms.view_channel:
-                    await messager(content="You have joined the category", ephemeral=True)
+                    await messager(content="You have joined the event", ephemeral=True)
                     return False
 
                 await existing.set_permissions(member, view_channel=True)
@@ -174,22 +172,21 @@ async def join_channel(
                 if info_ch:
                     await info_ch.send(embed=discord.Embed(
                         color=discord.Color.green(),
-                        title=f"{user.display_name} joined the category"
+                        title=f"{user.display_name} joined the event"
                     ))
 
                 logger.info(
-                    f"User {user.display_name}(id={user.id}) joined category {existing.name}(id={existing.id})"
+                    f"User {user.display_name}(id={user.id}) joined event {existing.name}(id={event.event_id})"
                 )
                 if fromadmin:
                     await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
                 return True
             except Exception as e:
-                logger.error(f"Failed to join category: {e}")
-                await messager(content=f"Failed to join category: {e}", ephemeral=True)
+                logger.error(f"Failed to join event: {e}")
+                await messager(content=f"Failed to join event: {e}", ephemeral=True)
                 return False
 
         if event_type == "event":
-            # Otherwise create a new category with child channels
             events_api = await fetch_ctf_events(event.event_id)
             if len(events_api) != 1:
                 await messager(content="Invalid event", ephemeral=True)
@@ -203,14 +200,12 @@ async def join_channel(
             }
 
             category = await _create_event_category_with_channels(guild, event.title, overwrites)
-            # store category id
-            updated = await crud.update_event(session, event_id=event.event_id, category_id=category.id)
+            updated = await crud_event.update_event(session, event_id=event.event_id, category_id=category.id)
             if updated is None:
                 await messager(
                     content=f"Failed to create: database update failed for event_id={event.event_id}",
                     ephemeral=True,
                 )
-                # Optionally clean up created category
                 try:
                     await category.delete(reason="DB update failed for event creation")
                 except Exception:
@@ -219,7 +214,7 @@ async def join_channel(
 
             if fromadmin:
                 await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
-                
+
             info_ch = _get_info_channel(category)
             if info_ch:
                 embed = await create_event_embed(event_api, f"{user.display_name} 發起了 {event.title}")
@@ -234,7 +229,7 @@ async def join_channel(
                 await info_ch.send(embed=embed, view=view)
 
             logger.info(
-                f"User {user.display_name}(id={user.id}) created and joined category {category.name}(id={category.id})"
+                f"User {user.display_name}(id={user.id}) created and joined event {event.title}(id={event.event_id})"
             )
             return True
 
@@ -259,7 +254,7 @@ async def create_custom_channel(
 
         # record custom category
         async with get_db() as session:
-            await crud.create_custom_event(session, title=name, category_id=category.id)
+            event = await crud_custom_event.create_event(session, title=name, category_id=category.id)
 
         info_ch = _get_info_channel(category)
         if info_ch:
@@ -269,7 +264,7 @@ async def create_custom_channel(
                 discord.ui.Button(
                     label='Set Private',
                     style=discord.ButtonStyle.gray,
-                    custom_id=f"ctf_info:private:custom:{category.id}",
+                    custom_id=f"ctf_info:private:custom:{event.event_id}",
                     )
             )
             await info_ch.send(embed=embed, view=view)
@@ -281,7 +276,7 @@ async def create_custom_channel(
             discord.ui.Button(
                 label='Join',
                 style=discord.ButtonStyle.blurple,
-                custom_id=f"ctf_join_channel:event:custom:{category.id}",
+                custom_id=f"ctf_join_channel:event:custom:{event.event_id}",
                 emoji=settings.EMOJI,
             )
         )
@@ -289,19 +284,19 @@ async def create_custom_channel(
             discord.ui.Button(
                 label='Set Private',
                 style=discord.ButtonStyle.gray,
-                custom_id=f"ctf_join_channel:private:custom:{category.id}",
+                custom_id=f"ctf_join_channel:private:custom:{event.event_id}",
                 )
         )
         await channel.send(embed=embed, view=view)
 
         await interaction.followup.send(content="Done", ephemeral=True)
         logger.info(
-            f"User {interaction.user.display_name}(id={interaction.user.id}) created custom category {category.name}(id={category.id})"
+            f"User {interaction.user.display_name}(id={interaction.user.id}) created custom event {event.title}(id={event.event_id})"
         )
         return
     except Exception as e:
-        logger.error(f"Failed to create custom category: {e}")
-        await interaction.followup.send(content=f"Failed to create custom category: {e}", ephemeral=True)
+        logger.error(f"Failed to create custom event: {e}")
+        await interaction.followup.send(content=f"Failed to create custom event: {e}", ephemeral=True)
         return
 
 async def set_private(
@@ -323,9 +318,9 @@ async def set_private(
         # get event from database
         events = []
         if event_type == "event":
-            events = await crud.read_event(session, event_id=[event_id])
+            events = await crud_event.read_event(session, event_id=[event_id])
         elif event_type == "custom":
-            events = await crud.read_custom_event(session, category_id=[event_id])
+            events = await crud_custom_event.read_event(session, event_id=[event_id])
         
         if len(events) != 1:
             await interaction.response.send_message(content="Invalid event", ephemeral=True)
@@ -335,15 +330,14 @@ async def set_private(
 
         updated = None
         if event_type == "event":
-            updated = await crud.update_event(session, event_id=event.event_id, private=not event.is_private)
+            updated = await crud_event.update_event(session, event_id=event.event_id, private=not event.is_private)
         elif event_type == "custom":
-            updated = await crud.update_custom_event(session, category_id=event.category_id, private=not event.is_private)
+            updated = await crud_custom_event.update_event(session, event_id=event.event_id, private=not event.is_private)
 
         if updated is None:
             await interaction.response.send_message(
                 content=(
-                    f"Failed to update privacy: database update failed for "
-                    + (f"event_id={event.event_id}" if event_type == "event" else f"category_id={event.category_id}")
+                    f"Failed to update privacy: database update failed for event_id={event.event_id}"
                 ),
                 ephemeral=True,
             )

@@ -13,7 +13,8 @@ from src.utils.embed_creator import create_event_embed
 from src.utils.join_channel import join_request, join_channel, set_private
 from src.utils.join_channel import get_info_channel_for_category
 from src.utils.get_channel import get_announcement_channel
-from src import crud
+import src.crud.event as crud_event
+import src.crud.custom_event as crud_custom_event
 
 # logging
 logger = logging.getLogger(__name__)
@@ -38,10 +39,7 @@ class CTFBGTask(commands.Cog):
         async with get_db() as session:
             all_events = await fetch_ctf_events()
             
-            known_events = await crud.read_event(
-                session,
-                finish_after=(datetime.now() + timedelta(days=settings.DATABASE_SEARCH_DAYS)).timestamp()
-            ) # get all known events with finish after now+DATABASE_SEARCH_DAYS (for example now+(-90))
+            known_events = await crud_event.read_event(session)
             known_events_id = [ event.event_id for event in known_events ]
         
             new_events_db:List[Event] = [] # new events data for database
@@ -59,7 +57,7 @@ class CTFBGTask(commands.Cog):
                     new_events_ctftime.append(event)
                     
             if len(new_events_db) > 0:
-                await crud.create_event(session, new_events_db)
+                await crud_event.create_events(session, new_events_db)
             
             for event in new_events_ctftime:
                 embed = await create_event_embed(event, "有新的 CTF 競賽！")
@@ -99,7 +97,7 @@ class CTFBGTask(commands.Cog):
                     # event removed
                     logger.info(f"Detected: {event.title} (event_id={event.event_id}) was removed")
                     
-                    await crud.delete_event(session, event_id=[event.event_id])
+                    await crud_event.delete_event(session, event_id=[event.event_id])
                     
                     embed = discord.Embed(
                         color=discord.Color.red(),
@@ -125,7 +123,7 @@ class CTFBGTask(commands.Cog):
                         # update detected
                         logger.info(f"Detected: {ntitle} (old: {event.title}) (event_id={event.event_id}) was updated")
                         
-                        await crud.update_event(session, event_id=event.event_id,
+                        await crud_event.update_event(session, event_id=event.event_id,
                                           title=ntitle,
                                           start=nstart,
                                           finish=nfinish)
@@ -184,9 +182,9 @@ class CTFBGTask(commands.Cog):
             async with get_db() as session:
                 events = []
                 if event_type == "event":
-                    events = await crud.read_event(session, event_id=[event_id])
+                    events = await crud_event.read_event(session, event_id=[event_id])
                 elif event_type == "custom":
-                    events = await crud.read_custom_event(session, category_id=[event_id])
+                    events = await crud_custom_event.read_event(session, event_id=[event_id])
                 if len(events) != 1:
                     await interaction.followup.send(content="Invalid event", ephemeral=True)
                     return
@@ -224,9 +222,9 @@ class CTFBGTask(commands.Cog):
             async with get_db() as session:
                 events = []
                 if event_type == "event":
-                    events = await crud.read_event(session, event_id=[event_id])
+                    events = await crud_event.read_event(session, event_id=[event_id])
                 elif event_type == "custom":
-                    events = await crud.read_custom_event(session, category_id=[event_id])
+                    events = await crud_custom_event.read_event(session, event_id=[event_id])
                 if len(events) != 1:
                     await interaction.followup.send(content="Invalid event", ephemeral=True)
                     return
@@ -237,7 +235,7 @@ class CTFBGTask(commands.Cog):
                     discord.ui.Button(
                         label=f'Set {"Public" if event.is_private else "Private"}',
                         style=discord.ButtonStyle.gray,
-                        custom_id=f"ctf_join_channel:private:{event_type}:{event_id}",
+                        custom_id=f"ctf_info:private:{event_type}:{event_id}",
                         )
                 )
                 await interaction.response.edit_message(view=view)

@@ -12,7 +12,7 @@ from src.config import settings
 logger = logging.getLogger("database")
 
 # create
-async def create_event(
+async def create_events(
     db:AsyncSession,
     events:List[Event]
 ) -> int:
@@ -34,7 +34,8 @@ async def read_event(
     db:AsyncSession,
     event_id:Optional[List[int]]=None,
     category_id:Optional[List[int]]=None,
-    finish_after:Optional[int]=(datetime.now() + timedelta(days=settings.DATABASE_SEARCH_DAYS)).timestamp(),
+    title:Optional[List[str]]=None,
+    finish_after:Optional[int]=None,
 ) -> List[Event]:
     try:
         query = sqlalchemy.select(Event)
@@ -45,6 +46,9 @@ async def read_event(
         if not (category_id is None):
             query = query.where(Event.category_id.in_(category_id))
             
+        if not(title is None):
+            query = query.where(Event.title.in_(title))
+
         if not (finish_after is None):
             query = query.where(Event.finish >= finish_after)
             
@@ -103,7 +107,7 @@ async def update_event(
 async def delete_event(
     db:AsyncSession,
     event_id:List[int],
-) -> int:
+) -> bool:
     try:
         stmt = sqlalchemy.delete(Event).where(Event.event_id.in_(event_id))
         await db.execute(stmt)
@@ -112,6 +116,6 @@ async def delete_event(
     except Exception as e:
         await db.rollback()
         logger.error(f"failed to write database : {str(e)}")
-        return 0
+        return False
 
-    return 1
+    return True
