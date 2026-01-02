@@ -203,7 +203,7 @@ class CTFBGTask(commands.Cog):
                 )
                 view.add_item(
                     discord.ui.Button(
-                        label=f'Set {"Private" if event.is_private else "Public"}',
+                        label=f'Set {"Public" if event.is_private else "Private"}',
                         style=discord.ButtonStyle.gray,
                         custom_id=f"ctf_join_channel:private:{event_type}:{event_id}",
                         )
@@ -231,7 +231,7 @@ class CTFBGTask(commands.Cog):
                 view = discord.ui.View(timeout=None)
                 view.add_item(
                     discord.ui.Button(
-                        label=f'Set {"Private" if event.is_private else "Public"}',
+                        label=f'Set {"Public" if event.is_private else "Private"}',
                         style=discord.ButtonStyle.gray,
                         custom_id=f"ctf_join_channel:private:{event_type}:{event_id}",
                         )

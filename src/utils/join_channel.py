@@ -196,44 +196,39 @@ async def join_channel(
                 guild.me: discord.PermissionOverwrite(view_channel=True),
             }
 
-            try:
-                category = await _create_event_category_with_channels(guild, event.title, overwrites)
-                # store category id
-                updated = await crud.update_event(session, event_id=event.event_id, category_id=category.id)
-                if updated is None:
-                    await interaction.response.send_message(
-                        content=f"Failed to create: database update failed for event_id={event.event_id}",
-                        ephemeral=True,
-                    )
-                    # Optionally clean up created category
-                    try:
-                        await category.delete(reason="DB update failed for event creation")
-                    except Exception:
-                        pass
-                    return
-
-                info_ch = _get_info_channel(category)
-                if info_ch:
-                    embed = await create_event_embed(event_api, f"{user.display_name} 發起了 {event.title}")
-                    view = discord.ui.View(timeout=None)
-                    view.add_item(
-                        discord.ui.Button(
-                            label='Set Private',
-                            style=discord.ButtonStyle.gray,
-                            custom_id=f"ctf_info:private:event:{category.id}",
-                            )
-                    )
-                    await info_ch.send(embed=embed, view=view)
-
-                await interaction.response.send_message(content="Done", ephemeral=True)
-                logger.info(
-                    f"User {user.display_name}(id={user.id}) created and joined category {category.name}(id={category.id})"
+            category = await _create_event_category_with_channels(guild, event.title, overwrites)
+            # store category id
+            updated = await crud.update_event(session, event_id=event.event_id, category_id=category.id)
+            if updated is None:
+                await interaction.response.send_message(
+                    content=f"Failed to create: database update failed for event_id={event.event_id}",
+                    ephemeral=True,
                 )
+                # Optionally clean up created category
+                try:
+                    await category.delete(reason="DB update failed for event creation")
+                except Exception:
+                    pass
                 return
-            except Exception as e:
-                logger.error(f"Failed to create category: {e}")
-                await interaction.response.send_message(content=f"Failed to create category: {e}", ephemeral=True)
-                return
+
+            info_ch = _get_info_channel(category)
+            if info_ch:
+                embed = await create_event_embed(event_api, f"{user.display_name} 發起了 {event.title}")
+                view = discord.ui.View(timeout=None)
+                view.add_item(
+                    discord.ui.Button(
+                        label='Set Private',
+                        style=discord.ButtonStyle.gray,
+                        custom_id=f"ctf_info:private:event:{category.id}",
+                        )
+                )
+                await info_ch.send(embed=embed, view=view)
+
+            await interaction.response.send_message(content="Done", ephemeral=True)
+            logger.info(
+                f"User {user.display_name}(id={user.id}) created and joined category {category.name}(id={category.id})"
+            )
+            return
 
 async def create_custom_channel(
     bot: commands.Bot,
@@ -347,6 +342,6 @@ async def set_private(
             return False
 
         logger.info(
-            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event.event_id}) private={not event.is_private}"
+            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event.event_id}) private={event.is_private}"
         )
         return True
