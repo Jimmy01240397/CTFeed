@@ -369,15 +369,8 @@ async def set_private(
                 ephemeral=True,
             )
             return False
-        try:
-            if updated.category_id:
-                guild = interaction.guild
-                category = bot.get_channel(updated.category_id)
-                if isinstance(category, discord.CategoryChannel):
-                    await category.set_permissions(guild.default_role, view_channel=not updated.is_private)
-        except Exception:
-            pass
+
         logger.info(
-            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event_id}) private={updated.is_private}"
+            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event_id}) private={event.is_private}"
         )
         return True
