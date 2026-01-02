@@ -67,7 +67,7 @@ async def join_request(
     interaction: discord.Interaction,
     event_data: str,
 ):
-    #await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
     event_type = str(event_data.split(":")[0])
     event_id = int(event_data.split(":")[1])
@@ -79,7 +79,7 @@ async def join_request(
         elif event_type == "custom":
             events = await crud.read_custom_event(session, category_id=[event_id])
         if len(events) != 1:
-            await interaction.response.send_message(content="Invalid event", ephemeral=True)
+            await interaction.followup.send(content="Invalid event", ephemeral=True)
             return
         event = events[0]
         guild_id = interaction.guild.id
@@ -113,15 +113,15 @@ async def join_request(
                     color=discord.Color.orange(),
                 )
                 await admin_channel.send(embed=embed, view=view)
-                await interaction.response.send_message(content="已送交管理員審核，請稍候。", ephemeral=True)
+                await interaction.followup.send(content="已送交管理員審核，請稍候。", ephemeral=True)
                 return
             except Exception as e:
                 logger.error(f"Failed to send admin approval request: {e}")
-                await interaction.response.send_message(content=f"審核請求失敗：{e}", ephemeral=True)
+                await interaction.followup.send(content=f"審核請求失敗：{e}", ephemeral=True)
                 return
 
         await join_channel(bot, interaction, event_data, guild_id, user_id)
-
+        await interaction.followup.send(content="Done", ephemeral=True)
 
 async def join_channel(
     bot: commands.Bot,
@@ -129,7 +129,10 @@ async def join_channel(
     event_data: str,
     guild_id: int,
     user_id: int,
+    fromadmin: bool=False,
 ):
+    messager = interaction.followup.send if fromadmin else interaction.response.send_message
+
     event_type = str(event_data.split(":")[0])
     event_id = int(event_data.split(":")[1])
 
@@ -141,7 +144,7 @@ async def join_channel(
         elif event_type == "custom":
             events = await crud.read_custom_event(session, category_id=[event_id])
         if len(events) != 1:
-            await interaction.response.send_message(content="Invalid event", ephemeral=True)
+            await messager(content="Invalid event", ephemeral=True)
             return
         event = events[0]
 
@@ -160,7 +163,7 @@ async def join_channel(
                 # Grant access on category
                 perms = existing.permissions_for(member)
                 if perms.view_channel:
-                    await interaction.response.send_message(content="You have joined the category", ephemeral=True)
+                    await messager(content="You have joined the category", ephemeral=True)
                     return
 
                 await existing.set_permissions(member, view_channel=True)
@@ -172,21 +175,21 @@ async def join_channel(
                         title=f"{user.display_name} joined the category"
                     ))
 
-                await interaction.response.send_message(content="Done", ephemeral=True)
+                await messager(content="Done", ephemeral=True)
                 logger.info(
                     f"User {user.display_name}(id={user.id}) joined category {existing.name}(id={existing.id})"
                 )
                 return
             except Exception as e:
                 logger.error(f"Failed to join category: {e}")
-                await interaction.response.send_message(content=f"Failed to join category: {e}", ephemeral=True)
+                await messager(content=f"Failed to join category: {e}", ephemeral=True)
                 return
 
         if event_type == "event":
             # Otherwise create a new category with child channels
             events_api = await fetch_ctf_events(event.event_id)
             if len(events_api) != 1:
-                await interaction.response.send_message(content="Invalid event", ephemeral=True)
+                await messager(content="Invalid event", ephemeral=True)
                 return
             event_api = events_api[0]
 
@@ -200,7 +203,7 @@ async def join_channel(
             # store category id
             updated = await crud.update_event(session, event_id=event.event_id, category_id=category.id)
             if updated is None:
-                await interaction.response.send_message(
+                await messager(
                     content=f"Failed to create: database update failed for event_id={event.event_id}",
                     ephemeral=True,
                 )
@@ -224,7 +227,6 @@ async def join_channel(
                 )
                 await info_ch.send(embed=embed, view=view)
 
-            await interaction.response.send_message(content="Done", ephemeral=True)
             logger.info(
                 f"User {user.display_name}(id={user.id}) created and joined category {category.name}(id={category.id})"
             )
