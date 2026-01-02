@@ -222,9 +222,13 @@ class CTFBGTask(commands.Cog):
             await set_private(self.bot, interaction, f"{event_type}:{event_id}")
 
             async with get_db() as session:
-                events = await crud.read_event(session, event_id=[event_id])
+                events = []
+                if event_type == "event":
+                    events = await crud.read_event(session, event_id=[event_id])
+                elif event_type == "custom":
+                    events = await crud.read_custom_event(session, category_id=[event_id])
                 if len(events) != 1:
-                    await interaction.response.send_message(content="Invalid event", ephemeral=True)
+                    await interaction.followup.send(content="Invalid event", ephemeral=True)
                     return
                 event = events[0]
 
@@ -259,8 +263,7 @@ class CTFBGTask(commands.Cog):
                 await interaction.response.send_message(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
                 return
 
-            if await join_channel(self.bot, interaction, f"{event_type}:{event_id}", guild_id, user_id, True):
-                await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
+            await join_channel(self.bot, interaction, f"{event_type}:{event_id}", guild_id, user_id, True)
 
         if custom_id.startswith("ctf_admin_reject:join:"):
             # Only admins can reject

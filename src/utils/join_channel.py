@@ -180,6 +180,8 @@ async def join_channel(
                 logger.info(
                     f"User {user.display_name}(id={user.id}) joined category {existing.name}(id={existing.id})"
                 )
+                if fromadmin:
+                    await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
                 return True
             except Exception as e:
                 logger.error(f"Failed to join category: {e}")
@@ -215,6 +217,9 @@ async def join_channel(
                     pass
                 return False
 
+            if fromadmin:
+                await interaction.response.edit_message(content=(f"Approved: ok"), view=None)
+                
             info_ch = _get_info_channel(category)
             if info_ch:
                 embed = await create_event_embed(event_api, f"{user.display_name} 發起了 {event.title}")
@@ -223,7 +228,7 @@ async def join_channel(
                     discord.ui.Button(
                         label='Set Private',
                         style=discord.ButtonStyle.gray,
-                        custom_id=f"ctf_info:private:event:{category.id}",
+                        custom_id=f"ctf_info:private:{event_data}",
                         )
                 )
                 await info_ch.send(embed=embed, view=view)
