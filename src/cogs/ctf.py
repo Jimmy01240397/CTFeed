@@ -10,8 +10,8 @@ from src.config import settings
 from src.database.database import get_db
 from src.database.model import BaseEvent, Event
 from src import crud
-import crud.event as crud_event
-import crud.custom_event as crud_custom_event
+import src.crud.event as crud_event
+import src.crud.custom_event as crud_custom_event
 from src.utils.join_channel import join_request
 from src.utils.join_channel import create_custom_channel
 
