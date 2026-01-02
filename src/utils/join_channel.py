@@ -35,6 +35,20 @@ def _get_info_channel(category: discord.CategoryChannel) -> Optional[discord.Tex
     return None
 
 
+async def _get_or_create_event_role(guild: discord.Guild, title: str) -> discord.Role:
+    role_name = f"ctf {"".join(c for c in title.lower() if c.isalnum())}"
+    for role in guild.roles:
+        if role.name.lower() == role_name.lower():
+            return role
+    return await guild.create_role(name=role_name, mentionable=False, hoist=False, reason=f"Create role for event {title}")
+
+async def _ensure_role_permission(category: discord.CategoryChannel, role: discord.Role):
+    try:
+        await category.set_permissions(role, view_channel=True)
+    except Exception:
+        pass
+
+
 async def get_info_channel_for_category(bot: commands.Bot, category_id: int) -> Optional[discord.TextChannel]:
     cat = bot.get_channel(category_id)
     if not isinstance(cat, discord.CategoryChannel):
@@ -159,14 +173,15 @@ async def join_channel(
             return False
 
         existing = bot.get_channel(event.category_id) if event.category_id else None
+        role = await _get_or_create_event_role(guild, event.title)
         if isinstance(existing, discord.CategoryChannel):
             try:
-                perms = existing.permissions_for(member)
-                if perms.view_channel:
+                await _ensure_role_permission(existing, role)
+                if role not in member.roles:
+                    await member.add_roles(role, reason=f"Join event {event.event_id}")
+                else:
                     await messager(content="You have joined the event", ephemeral=True)
                     return False
-
-                await existing.set_permissions(member, view_channel=True)
 
                 info_ch = _get_info_channel(existing)
                 if info_ch:
@@ -195,11 +210,16 @@ async def join_channel(
 
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                user: discord.PermissionOverwrite(view_channel=True),
+                role: discord.PermissionOverwrite(view_channel=True),
                 guild.me: discord.PermissionOverwrite(view_channel=True),
             }
 
             category = await _create_event_category_with_channels(guild, event.title, overwrites)
+            await _ensure_role_permission(category, role)
+            try:
+                await member.add_roles(role, reason=f"Join event {event.event_id}")
+            except Exception:
+                pass
             updated = await crud_event.update_event(session, event_id=event.event_id, category_id=category.id)
             if updated is None:
                 await messager(
@@ -245,7 +265,6 @@ async def create_custom_channel(
 
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        interaction.user: discord.PermissionOverwrite(view_channel=True),
         guild.me: discord.PermissionOverwrite(view_channel=True),
     }
 
@@ -255,6 +274,14 @@ async def create_custom_channel(
         # record custom category
         async with get_db() as session:
             event = await crud_custom_event.create_event(session, title=name, category_id=category.id)
+
+        role = await _get_or_create_event_role(guild, event.event_id, event.title)
+        await _ensure_role_permission(category, role)
+        try:
+            if member:
+                await member.add_roles(role, reason=f"Create custom event {name}")
+        except Exception:
+            pass
 
         info_ch = _get_info_channel(category)
         if info_ch:
@@ -342,8 +369,15 @@ async def set_private(
                 ephemeral=True,
             )
             return False
-
+        try:
+            if updated.category_id:
+                guild = interaction.guild
+                category = bot.get_channel(updated.category_id)
+                if isinstance(category, discord.CategoryChannel):
+                    await category.set_permissions(guild.default_role, view_channel=not updated.is_private)
+        except Exception:
+            pass
         logger.info(
-            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event_id}) private={event.is_private}"
+            f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event_id}) private={updated.is_private}"
         )
         return True
