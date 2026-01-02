@@ -178,7 +178,8 @@ class CTFBGTask(commands.Cog):
                 await interaction.response.send_message("Invalid arguments", ephemeral=True)
                 return
             
-            await set_private(self.bot, interaction, f"{event_type}:{event_id}")
+            if not await set_private(self.bot, interaction, f"{event_type}:{event_id}"):
+                return
 
             async with get_db() as session:
                 events = []

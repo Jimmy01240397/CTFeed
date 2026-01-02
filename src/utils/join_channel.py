@@ -149,6 +149,7 @@ async def join_channel(
         if guild is None:
             return False, "Guild not found"
         member = guild.get_member(user_id)
+        user = bot.get_user(user_id)
         if member is None:
             return False, "Member not found"
 
@@ -168,12 +169,12 @@ async def join_channel(
                 if info_ch:
                     await info_ch.send(embed=discord.Embed(
                         color=discord.Color.green(),
-                        title=f"{interaction.user.display_name} joined the category"
+                        title=f"{user.display_name} joined the category"
                     ))
 
                 await interaction.followup.send(content="Done", ephemeral=True)
                 logger.info(
-                    f"User {interaction.user.display_name}(id={interaction.user.id}) joined category {existing.name}(id={existing.id})"
+                    f"User {user.display_name}(id={user.id}) joined category {existing.name}(id={existing.id})"
                 )
                 return
             except Exception as e:
@@ -191,7 +192,7 @@ async def join_channel(
 
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                interaction.user: discord.PermissionOverwrite(view_channel=True),
+                user: discord.PermissionOverwrite(view_channel=True),
                 guild.me: discord.PermissionOverwrite(view_channel=True),
             }
 
@@ -213,7 +214,7 @@ async def join_channel(
 
                 info_ch = _get_info_channel(category)
                 if info_ch:
-                    embed = await create_event_embed(event_api, f"{interaction.user.display_name} 發起了 {event.title}")
+                    embed = await create_event_embed(event_api, f"{user.display_name} 發起了 {event.title}")
                     view = discord.ui.View(timeout=None)
                     view.add_item(
                         discord.ui.Button(
@@ -226,7 +227,7 @@ async def join_channel(
 
                 await interaction.followup.send(content="Done", ephemeral=True)
                 logger.info(
-                    f"User {interaction.user.display_name}(id={interaction.user.id}) created and joined category {category.name}(id={category.id})"
+                    f"User {user.display_name}(id={user.id}) created and joined category {category.name}(id={category.id})"
                 )
                 return
             except Exception as e:
@@ -310,10 +311,10 @@ async def set_private(
     try:
         if not getattr(interaction.user, "guild_permissions", None) or not interaction.user.guild_permissions.administrator:
             await interaction.followup.send(content="你沒有權限使用此功能（需要 Administrator）", ephemeral=True)
-            return
+            return False
     except Exception:
         await interaction.followup.send(content="權限檢查失敗，請於伺服器中使用此功能", ephemeral=True)
-        return
+        return False
 
     async with get_db() as session:
         event_type = str(event_data.split(":")[0])
@@ -327,7 +328,7 @@ async def set_private(
         
         if len(events) != 1:
             await interaction.followup.send(content="Invalid event", ephemeral=True)
-            return
+            return False
 
         event = events[0]
 
@@ -345,9 +346,9 @@ async def set_private(
                 ),
                 ephemeral=True,
             )
+            return False
 
-        await interaction.followup.send(content="Done", ephemeral=True)
         logger.info(
             f"User {interaction.user.display_name}(id={interaction.user.id}) set event {event.title}(id={event.event_id}) private={not event.is_private}"
         )
-        return
+        return True
