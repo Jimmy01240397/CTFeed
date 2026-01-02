@@ -9,16 +9,19 @@ async def read_event(
     category_id:Optional[List[int]]=None,
     title:Optional[List[str]]=None,
 ) -> List[Event]:
-    return await event.read_event(
-        event_id=event_id,
-        category_id=category_id,
-        title=title,
-    ) + await custom_event.read_event(
-        event_id=event_id,
-        category_id=category_id,
-        title=title,
-    )
-
+    async with get_db() as session:
+        return await event.read_event(
+            session,
+            event_id=event_id,
+            category_id=category_id,
+            title=title,
+        ) + await custom_event.read_event(
+            session,
+            event_id=event_id,
+            category_id=category_id,
+            title=title,
+        )
+    
 async def read_all_event(filter:bool=False) -> List[BaseEvent]:
     async with get_db() as session:
         known_events:List[Event] = await event.read_event(session)
