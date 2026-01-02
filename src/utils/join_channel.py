@@ -269,6 +269,9 @@ async def create_custom_channel(
     }
 
     try:
+        if len(await crud_custom_event.read_event(session, title=[name])) > 0:
+            await interaction.followup.send(content="Custom event with this name already exists", ephemeral=True)
+            return
         category = await _create_event_category_with_channels(guild, name, overwrites)
 
         # record custom category
